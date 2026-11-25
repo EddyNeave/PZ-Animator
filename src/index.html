@@ -61,11 +61,39 @@
   <main id="main">
     <div id="viewport"></div>
     <div id="hint" class="muted small">Middle mouse: orbit · Right mouse: pan · Wheel: zoom · F: frame character · B: bones · Drag files in to load them</div>
+    <div id="editBar">
+      <div class="edrow">
+        <button id="edKey" title="Key every bone at this frame (K)">Key pose</button>
+        <button id="edDelete" title="Delete the selected keyframe (Del)">Delete key</button>
+        <span class="sep"></span>
+        <select id="edBone" title="Selected bone (or click a joint handle)"></select>
+        <button id="edReset" title="Put the selected bone back to its rest pose and key it">Reset bone</button>
+        <span class="sep"></span>
+        <div id="edInterp" class="disabled">
+          <span id="edKeyLabel" class="muted small">No key selected</span>
+          <span class="muted small">In</span>
+          <div class="seg mini" id="edIn"><button data-v="flat">Flat</button><button data-v="linear">Linear</button><button data-v="cubic">Cubic</button></div>
+          <span class="muted small">Out</span>
+          <div class="seg mini" id="edOut"><button data-v="flat">Flat</button><button data-v="linear">Linear</button><button data-v="cubic">Cubic</button></div>
+        </div>
+        <span class="grow"></span>
+        <button id="edUndo" title="Undo (Ctrl+Z)">↶</button><button id="edRedo" title="Redo (Ctrl+Y)">↷</button>
+        <button id="edExit">Exit Animate</button>
+      </div>
+      <div class="edrow">
+        <label class="inline">Name <input id="edName" spellcheck="false" style="width:170px"></label>
+        <label class="inline" title="How far the character moves forward per loop (units). 0 = in place. Vanilla Bob_Walk is 0.945.">Forward per loop <input id="edForward" type="number" min="0" step="0.05" style="width:70px"></label>
+        <span class="muted small">Drag a joint to rotate its bone · Shift+drag twists · orange handle moves the hips · moving a bone keys it · ←/→ step frames</span>
+      </div>
+      <canvas id="timeline"></canvas>
+    </div>
     <footer id="transport" class="disabled">
       <button id="playBtn" title="Play / pause (Space)">▶</button>
       <input id="scrub" type="range" min="0" max="1000" value="0">
       <span id="frameLabel" class="mono">0 / 0</span>
-      <label class="inline">Speed <input id="speed" type="number" min="0.05" max="5" step="0.05" value="1"></label>
+      <label class="inline"><span id="speedLabel">Speed</span> <input id="speed" type="number" min="0.05" max="5" step="0.05" value="1"></label>
+      <span class="grow edit-only"></span>
+      <button id="animateBtn">Animate…</button>
       <button id="exportBtn" class="primary">Export to mod…</button>
     </footer>
     <div id="status"></div>
@@ -84,7 +112,7 @@
           <div id="exSpeedNote" class="note"></div>
           <label id="exMatchRow" class="radio hidden"><input type="checkbox" id="exMatchSpeed" checked> Match vanilla speed (scale the forward motion to the vanilla clip's)</label>
         </fieldset>
-        <label class="radio" title="Same setting as in the viewer"><input type="checkbox" id="exKeepBase"> Keep base skeleton (bone lengths from the loaded model, as previewed)</label>
+        <label class="radio" id="exKeepBaseRow" title="Same setting as in the viewer"><input type="checkbox" id="exKeepBase"> Keep base skeleton (bone lengths from the loaded model, as previewed)</label>
 
         <div id="exNodeBox" class="hidden sub">
           <input id="exNodeSearch" type="search" placeholder="Search vanilla nodes, e.g. actions/ or cow/idle">
@@ -107,6 +135,16 @@
         <ul id="exFiles" class="mono small"></ul>
         <div id="exMsg" class="exmsg"></div>
         <div class="row end"><button id="exCancel">Close</button><button id="exGo" class="primary">Export</button></div>
+      </div>
+    </div>
+    <div id="animateDlg" class="modal hidden">
+      <div class="dialog narrow">
+        <h3>Animate</h3>
+        <button id="anNew" class="choice"><b>New animation</b><span>Start from the rest pose</span></button>
+        <button id="anFrame" class="choice"><b>New, from the current frame</b><span>Start from the pose the preview shows now</span></button>
+        <button id="anCopy" class="choice"><b>Edit a copy of <span id="anCopyName"></span></b><span>Every frame of the clip becomes editable keys</span></button>
+        <button id="anResume" class="choice"><b>Resume autosaved animation</b><span id="anResumeName"></span></button>
+        <div class="row end"><button id="anCancel">Cancel</button></div>
       </div>
     </div>
     <div id="dropOverlay" class="hidden"><div>Drop .x models or animations, or .png textures</div></div>

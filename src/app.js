@@ -5,6 +5,7 @@ import { buildCharacter, clipFromSet, resetPose, forwardMotion } from './charact
 import { buildRefIndex, describeUse } from './refs.js';
 import { pickFolder, indexFolder, FileIndex, isDesktop } from './fsbridge.js';
 import { initExport } from './exportui.js';
+import { initAnimate } from './animate.js';
 
 const FPS = 30; // PZ animations: 4800 ticks/s, a key every 160 ticks
 
@@ -24,7 +25,7 @@ const controls = new OrbitControls(camera, renderer.domElement);
 controls.target.set(0, 0.5, 0);
 controls.enableDamping = true;
 controls.dampingFactor = 0.15;
-// Left mouse is reserved for bone posing (next milestone).
+// Left mouse poses bones in Animate mode.
 controls.mouseButtons = { LEFT: null, MIDDLE: THREE.MOUSE.ROTATE, RIGHT: THREE.MOUSE.PAN };
 controls.update();
 
@@ -201,6 +202,7 @@ async function setCharacter(bodyX) {
   if (state.skeletonHelper) { scene.remove(state.skeletonHelper); state.skeletonHelper = null; }
 
   state.character = buildCharacter(bodyX);
+  state.characterX = bodyX;
   scene.add(state.character.root);
   state.skeletonHelper = new THREE.SkeletonHelper(state.character.root);
   state.skeletonHelper.visible = state.showBones;
@@ -208,6 +210,7 @@ async function setCharacter(bodyX) {
   state.mixer = new THREE.AnimationMixer(state.character.root);
   state.action = null;
   setStatus('');
+  animate?.onCharacterChanged();
 }
 
 async function replayCurrent() {
@@ -231,6 +234,7 @@ async function playAnim(rel, startTime = 0) {
 
 // Play the first animation set of a parsed .x file on the current character.
 function playParsed(x, label, startTime = 0, note = '') {
+  if (animate?.active) animate.exitQuiet();
   if (!x.animationSets.length) throw new Error('No animation in ' + (label || 'file'));
   const set = x.animationSets[0];
   resetPose(state.character);
@@ -461,14 +465,17 @@ $('animList').addEventListener('click', (e) => {
   const li = e.target.closest('li');
   if (li) playAnim(li.dataset.path);
 });
-$('playBtn').addEventListener('click', () => setPlaying(!state.playing));
+$('playBtn').addEventListener('click', () => { if (animate.active) animate.togglePlay(); else setPlaying(!state.playing); });
 $('scrub').addEventListener('input', () => {
   if (!state.action) return;
   setPlaying(false);
   state.action.time = ($('scrub').value / 1000) * state.clip.duration;
   state.mixer.update(0);
 });
-$('speed').addEventListener('input', () => { if (state.mixer) state.mixer.timeScale = +$('speed').value || 1; });
+$('speed').addEventListener('input', () => {
+  if (animate.active) animate.setSpeed(+$('speed').value || 1);
+  else if (state.mixer) state.mixer.timeScale = +$('speed').value || 1;
+});
 
 function frameCharacter(fit = false) {
   if (fit && state.character) {
@@ -490,7 +497,7 @@ function frameCharacter(fit = false) {
 }
 window.addEventListener('keydown', (e) => {
   if (e.target.matches('input, select, textarea')) return;
-  if (e.code === 'Space') { e.preventDefault(); if (state.action) setPlaying(!state.playing); }
+  if (e.code === 'Space') { e.preventDefault(); if (animate.active) animate.togglePlay(); else if (state.action) setPlaying(!state.playing); }
   if (e.key === 'f' || e.key === 'F') frameCharacter(!!state.customModel);
   if (e.key === 'b' || e.key === 'B') {
     state.showBones = !state.showBones;
@@ -501,16 +508,28 @@ window.addEventListener('keydown', (e) => {
 // ---------- loop ----------
 renderer.setAnimationLoop(() => {
   const dt = clock.getDelta();
-  if (state.mixer && state.playing) state.mixer.update(dt);
-  updateTransport();
+  if (!animate.tick(dt)) {
+    if (state.mixer && state.playing) state.mixer.update(dt);
+    updateTransport();
+  }
   controls.update();
   renderer.render(scene, camera);
 });
 
-initExport({ state, setStatus, setKeepBase, currentClipName });
+const animate = initAnimate({
+  state, scene, camera, renderer, setStatus,
+  setPreviewPlaying: (p) => setPlaying(p),
+  onExitEdit: () => {
+    resetPose(state.character);
+    $('speed').value = 1;
+    if (state.mixer) state.mixer.timeScale = 1;
+    if (state.current) { playParsed(state.current.x, state.current.label, 0); }
+  },
+});
+initExport({ state, setStatus, setKeepBase, currentClipName, getEditSource: () => animate.exportSource() });
 
 // Test hooks (used by automated render checks).
-window.__pz = { state, openFolder, handleDrop, playAnim, rebuildCharacter, applyTexture, camera, controls, setPlaying,
+window.__pz = { state, animate, openFolder, handleDrop, playAnim, rebuildCharacter, applyTexture, camera, controls, setPlaying,
   setOption: async (key, v) => { $(key === 'gender' ? 'genderSeg' : 'typeSeg').querySelector(`[data-v="${v}"]`).click(); await new Promise(r => setTimeout(r, 300)); } };
 
 // ---------- startup ----------

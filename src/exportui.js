@@ -7,7 +7,10 @@ import { modsDefaultDir, pickModsDir, listMods, checkModFiles, writeModFiles } f
 const $ = (id) => document.getElementById(id);
 const NAME_RE = /^[A-Za-z0-9_]+$/;
 
-export function initExport({ state, setStatus, setKeepBase, currentClipName }) {
+export function initExport({ state, setStatus, setKeepBase, currentClipName, getEditSource }) {
+  // What is being exported: the editor's animation when Animate mode is on, else the playing clip.
+  let editSrc = null;
+  const editing = () => !!editSrc;
   const ui = {
     modsDir: null,
     mods: [],
@@ -48,7 +51,7 @@ export function initExport({ state, setStatus, setKeepBase, currentClipName }) {
     const errors = [];
     if (!NAME_RE.test(name)) errors.push('Animation name can only use letters, numbers and _');
     const vanilla = vanillaAnim(name);
-    const srcRel = state.current?.actualRel;
+    const srcRel = editing() ? editSrc.templateRel : state.current?.actualRel;
     const fallbackDir = srcRel ? dirOf(srcRel) : 'anims_X';
     const animRel = vanilla ? mediaRelOf(vanilla) : `${fallbackDir}/${name}.x`;
 
@@ -77,8 +80,9 @@ export function initExport({ state, setStatus, setKeepBase, currentClipName }) {
     if (!mod) errors.push('Choose a mod to export into');
 
     // Forward speed compared with the vanilla clip this replaces.
-    const set = state.current.x.animationSets[0];
-    const ours = forwardMotion(set, state.current.x.ticksPerSecond);
+    const ours = editing()
+      ? forwardMotion({ tracks: editSrc.anim.tracks.map(t => ({ bone: t.bone, pos: t.pos })) }, editSrc.anim.ticksPerSecond)
+      : forwardMotion(state.current.x.animationSets[0], state.current.x.ticksPerSecond);
     let speed = null;
     if (vanilla) {
       const vm = ui.vanillaMotion.get(name.toLowerCase());
@@ -86,7 +90,7 @@ export function initExport({ state, setStatus, setKeepBase, currentClipName }) {
       else if (vm !== 'loading') speed = { ours, vanilla: vm };
     }
     const canMatch = speed && speed.vanilla.speed > 0.001 && ours.speed > 0.001 && Math.abs(ours.speed / speed.vanilla.speed - 1) > 0.02;
-    const matchK = canMatch && $('exMatchSpeed').checked ? speed.vanilla.speed / ours.speed : null;
+    const matchK = canMatch && !editing() && $('exMatchSpeed').checked ? speed.vanilla.speed / ours.speed : null;
     return { name, mode, vanilla, animRel, kateRel, node, mod, errors, isBob, speed, canMatch, matchK };
   }
 
@@ -101,7 +105,7 @@ export function initExport({ state, setStatus, setKeepBase, currentClipName }) {
   }
 
   function refresh() {
-    if (!state.current) return;
+    if (!state.current && !editing()) return;
     const p = plan();
     const mode = p.mode;
     $('exNodeBox').classList.toggle('hidden', mode !== 'node');
@@ -137,7 +141,8 @@ export function initExport({ state, setStatus, setKeepBase, currentClipName }) {
     }
     $('exSpeedNote').textContent = speedNote;
     $('exSpeedNote').classList.toggle('warn', !!p.canMatch);
-    $('exMatchRow').classList.toggle('hidden', !p.canMatch);
+    $('exMatchRow').classList.toggle('hidden', !p.canMatch || editing());
+    $('exKeepBaseRow').classList.toggle('hidden', editing());
 
     if (p.mod?.upgrade) $('exModNote').textContent = "Build 42 ignores mods without a 42 folder, so this adds one: files go in 42/media and the mod's mod.info is copied into 42/.";
     else if (p.mod?.isNew) $('exModNote').textContent = `Creates ${p.mod.folder}/42/mod.info and ${p.mod.folder}/common/`;
@@ -158,6 +163,14 @@ export function initExport({ state, setStatus, setKeepBase, currentClipName }) {
   }
 
   function buildFiles(p) {
+    if (editing()) {
+      const res = buildExportFiles({ anim: editSrc.anim, templateText: editSrc.templateText, name: p.name, animRel: p.animRel, kateRel: p.kateRel, node: p.node, mod: p.mod });
+      if (p.mod.upgrade) {
+        res.files.push({ rel: '42/mod.info', content: p.mod.infoText || `name=${p.mod.name}\r\nid=${p.mod.id || p.mod.folder}\r\n` });
+        res.dirs.push('common');
+      }
+      return res;
+    }
     const x = state.current.x;
     const set = x.animationSets[0];
     let anim = animFromSet(set, x.ticksPerSecond);
@@ -221,10 +234,16 @@ export function initExport({ state, setStatus, setKeepBase, currentClipName }) {
   }
 
   async function open() {
-    if (!state.current) { setStatus('Play an animation first, then export it.', true); return; }
-    const set = state.current.x.animationSets[0];
-    $('exSource').textContent = state.current.label || state.current.actualRel || set.name;
-    $('exName').value = currentClipName() || set.name;
+    editSrc = getEditSource?.() || null;
+    if (!state.current && !editSrc) { setStatus('Play an animation first, then export it.', true); return; }
+    if (editSrc) {
+      $('exSource').textContent = editSrc.label;
+      $('exName').value = editSrc.name;
+    } else {
+      const set = state.current.x.animationSets[0];
+      $('exSource').textContent = state.current.label || state.current.actualRel || set.name;
+      $('exName').value = currentClipName() || set.name;
+    }
     $('exKeepBase').checked = state.keepBase;
     $('exMatchSpeed').checked = true;
     $('exNodeName').dataset.touched = '';

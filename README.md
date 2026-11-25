@@ -5,8 +5,8 @@ character models, skins and vanilla animations straight from your game folder, p
 animation you drag in (players, zombies, animals), and exports animations into a mod, either replacing
 a vanilla animation or adding a new AnimSet node.
 
-> **Status:** early. Viewing and export work; posing, keyframes and interpolation are in progress
-> (see [Roadmap](#roadmap)).
+> **Status:** early but usable: view, animate (posing, keyframes, interpolation) and export to mods.
+> See [Roadmap](#roadmap).
 >
 > Unofficial fan-made tool, not affiliated with or endorsed by The Indie Stone. It contains **no game
 > files**; it reads them from your own Project Zomboid install.
@@ -31,7 +31,7 @@ The folder is remembered for next time. The tool only **reads** your game files.
 | Show/hide skeleton | B |
 | Play / pause | Space |
 
-Left mouse is reserved for bone posing.
+In Animate mode, left mouse poses bones (see below).
 
 ## Features
 
@@ -53,6 +53,29 @@ Left mouse is reserved for bone posing.
   - `.x` animation: plays on the current model. Files that contain both (most vanilla animations) ask which you want.
   - Click Female or Male to go back to the PZ body. A dropped animation keeps playing until you pick one from the list.
 
+## Animating
+
+Click **Animate…** and choose:
+- **New animation** (from the rest pose), **New, from the current frame** (the pose the preview shows),
+  **Edit a copy** of the playing clip (every frame becomes editable keys), or **Resume** the autosaved one.
+
+Then:
+
+| Action | How |
+|---|---|
+| Rotate a bone | Drag the handle at the end of the bone (its joint). The bone points at the mouse. |
+| Twist a bone | Shift + drag a handle |
+| Move the hips / whole body | Drag the orange handle |
+| Key | Moving a bone keys it at the current frame (auto-key). **Key pose** (K) keys every bone. |
+| Timeline | Click or drag to scrub, ←/→ step a frame. Click a key to select it, drag it to retime, Delete to remove. The timeline grows as you add keys; the last key is the loop point. |
+| Interpolation | Select a key, then pick **In** and **Out**: Flat (hold, then snap), Linear (constant speed) or Cubic (ease). Between two keys the earlier key's Out and the later key's In apply. |
+| Overall speed | Plays faster or slower; baked into the export. |
+| Forward per loop | Root motion for walk-type clips (vanilla Bob_Walk: 0.945). 0 keeps it in place. |
+| Undo / redo | Ctrl+Z / Ctrl+Y |
+
+Work is autosaved in the app. **Export to mod…** exports the animation you're editing, using a vanilla
+clip of the same skeleton (e.g. `Bob_Walk.x`) as the template for the file's header and bone list.
+
 ## Exporting to a mod
 
 Play an animation, then click **Export to mod…**:
@@ -71,8 +94,9 @@ Play an animation, then click **Export to mod…**:
   (default `<your user folder>\Zomboid\mods`). Build 42 ignores mods without a `42` folder, so for old-layout
   mods the tool adds one and copies `mod.info` into it. Existing files are never overwritten without confirming.
 
-> **Restart the game after exporting.** Animations load at startup, so enabling a mod mid-session won't show
-> the change.
+> **Enable animation mods from the main menu, restart Project Zomboid, then load your save.** Animations
+> load at startup, so enabling a mod mid-session won't show the change. If something looks off after
+> switching mods on an existing save, try a new game.
 
 Replacing a clip affects every node that uses it. Replace is safest for one-off action clips (a reload, digging);
 for anything custom, adding a new node leaves vanilla behaviour alone. Movement clips (walk, run) feed into
@@ -104,6 +128,8 @@ Copy those from your own install; game files are git-ignored and must never be c
   the AnimationSet). Round-tripping a vanilla animation reproduces it exactly.
 - `src/exporter.js` / `src/exportui.js`: builds and writes mod files; the export dialog.
 - `src/refs.js`: indexes which AnimSet nodes use which clips.
+- `src/editor.js`: the animation document: keys, interpolation, evaluation, baking for export.
+- `src/posing.js`, `src/timeline.js`, `src/animate.js`: joint handles and dragging, the timeline, Animate mode.
 - `src/app.js`: UI.
 
 ## Roadmap
@@ -112,9 +138,10 @@ Copy those from your own install; game files are git-ignored and must never be c
 - [x] Drag-and-drop models, textures and animations
 - [x] Export to a new or existing mod (replace vanilla, or new node from a vanilla template)
 - [x] Keep base skeleton, Used by panel, forward speed warnings and Match vanilla speed
-- [ ] Bone posing (drag a joint to rotate), auto-key, timeline that grows with keys
-- [ ] Per-key interpolation: flat / linear / cubic, separately in and out
-- [ ] Overall speed setting written to the node
+- [x] Bone posing (drag a joint to rotate, Shift to twist, hip move), auto-key, timeline that grows with keys
+- [x] Per-key interpolation: flat / linear / cubic, separately in and out
+- [x] Overall speed and forward motion, undo/redo, autosave
+- [ ] Save / open animation project files
 - [ ] `.fbx` / `.glb` support
 
 ## AI disclosure

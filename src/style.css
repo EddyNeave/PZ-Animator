@@ -73,3 +73,23 @@ label.check { justify-content: flex-start; color: var(--text); gap: 6px; }
 #usedBy .node { color: var(--text); } #usedBy .role { color: var(--muted); }
 #usedByTitle { margin-top: 2px; }
 .uselist { margin: 0; padding: 4px 8px 4px 22px; font-size: 11px; color: var(--muted); max-height: 110px; overflow: auto; }
+
+/* ---------- Animate mode ---------- */
+#editBar { display: none; flex-direction: column; gap: 6px; padding: 8px 12px 4px; background: var(--panel); border-top: 1px solid var(--line); }
+body.editing #editBar { display: flex; }
+body.editing #scrub { display: none; }
+body.editing #animateBtn { display: none; }
+.edit-only { display: none; } body.editing .edit-only { display: block; }
+.edrow { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.edrow .grow, footer .grow { flex: 1; }
+.edrow .sep { width: 1px; height: 20px; background: var(--line); }
+#edBone { width: 190px; }
+#edInterp { display: flex; align-items: center; gap: 6px; }
+#edInterp.disabled { opacity: .4; pointer-events: none; }
+#edKeyLabel { min-width: 70px; }
+.seg.mini button { padding: 3px 7px; font-size: 12px; }
+#timeline { width: 100%; height: 64px; display: block; border: 1px solid var(--line); border-radius: 5px; cursor: pointer; }
+.dialog.narrow { width: 380px; }
+.choice { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; text-align: left; padding: 9px 12px; }
+.choice span { color: var(--muted); font-size: 12px; }
+.choice:disabled { opacity: .4; cursor: default; }
