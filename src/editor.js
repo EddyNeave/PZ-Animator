@@ -210,6 +210,88 @@ export class AnimDoc {
   }
 }
 
+/**
+ * Key reduction: per bone, keep only the keys needed to reproduce the current motion within a
+ * tolerance (degrees for rotation, units for position). Douglas-Peucker style: start from the first
+ * and last key, then keep adding the key where the rebuilt motion is furthest off, until every
+ * frame is within tolerance. The rebuild uses the document's own In/Out modes for the kept keys.
+ * Returns { before, after, maxErrorDeg, maxErrorPos }.
+ */
+export function reduceKeys(doc, { angleTol = 0.5, posTol = 0.001 } = {}) {
+  const tolRad = (angleTol * Math.PI) / 180;
+  let before = 0, after = 0, maxErrRad = 0, maxErrPos = 0;
+  const q = new THREE.Quaternion(), qa = new THREE.Quaternion(), qb = new THREE.Quaternion(), qr = new THREE.Quaternion();
+  const p = new THREE.Vector3();
+  const newChannels = new Map();
+  const originals = new Map(); // bone -> { q: Map(frame->Quaternion), p: Map(frame->Vector3) }
+
+  for (const [bone, ch] of doc.channels) {
+    const keys = [...ch.keys()].sort((a, b) => a - b);
+    before += keys.length;
+    if (keys.length <= 2) { newChannels.set(bone, ch); after += keys.length; continue; }
+    const first = keys[0], last = keys[keys.length - 1];
+    // The motion as it plays now, at every whole frame.
+    const origQ = new Map(), origP = new Map();
+    for (let f = first; f <= last; f++) {
+      const res = doc.evaluateBone(bone, f, q, p);
+      origQ.set(f, q.clone());
+      if (res === 'both') origP.set(f, p.clone());
+    }
+    originals.set(bone, { q: origQ, p: origP });
+    const modeOut = (f) => doc.frames.get(f)?.out || 'cubic';
+    const modeIn = (f) => doc.frames.get(f)?.in || 'cubic';
+    const errorsBetween = (a, b) => {
+      // Rebuild frames between kept keys a and b and measure the error at each frame.
+      const ka = ch.get(a), kb = ch.get(b);
+      qa.fromArray(ka.q); qb.fromArray(kb.q);
+      if (qa.dot(qb) < 0) qb.set(-qb.x, -qb.y, -qb.z, -qb.w);
+      let worstKey = null, worstErr = 0;
+      for (let f = a + 1; f < b; f++) {
+        const s = ease((f - a) / (b - a), modeOut(a), modeIn(b));
+        qr.copy(qa).slerp(qb, s);
+        const angErr = qr.angleTo(origQ.get(f));
+        let posErr = 0;
+        if (ka.p && kb.p && origP.has(f)) {
+          const o = origP.get(f);
+          posErr = Math.hypot(ka.p[0] + (kb.p[0] - ka.p[0]) * s - o.x, ka.p[1] + (kb.p[1] - ka.p[1]) * s - o.y, ka.p[2] + (kb.p[2] - ka.p[2]) * s - o.z);
+        }
+        // Normalise both errors against their tolerance so either can force a key.
+        const score = Math.max(angErr / tolRad, posErr / posTol);
+        if (score > worstErr && ch.has(f)) { worstErr = score; worstKey = f; }
+      }
+      return { worstKey, worstErr };
+    };
+    const kept = new Set([first, last]);
+    const stack = [[first, last]];
+    while (stack.length) {
+      const [a, b] = stack.pop();
+      if (b - a < 2) continue;
+      const { worstKey, worstErr } = errorsBetween(a, b);
+      if (worstKey !== null && worstErr > 1) {
+        kept.add(worstKey);
+        stack.push([a, worstKey], [worstKey, b]);
+      }
+    }
+    const reduced = new Map([...kept].sort((x, y) => x - y).map(f => [f, ch.get(f)]));
+    newChannels.set(bone, reduced);
+    after += reduced.size;
+  }
+
+  doc.channels = newChannels;
+  doc.prune();
+
+  // Measure the real remaining error against the original motion.
+  for (const [bone, o] of originals) {
+    for (const [f, oq] of o.q) {
+      const res = doc.evaluateBone(bone, f, q, p);
+      if (!res) continue;
+      maxErrRad = Math.max(maxErrRad, q.angleTo(oq));
+      if (res === 'both' && o.p.has(f)) maxErrPos = Math.max(maxErrPos, p.distanceTo(o.p.get(f)));
+    }
+  }
+  return { before, after, maxErrorDeg: (maxErrRad * 180) / Math.PI, maxErrorPos: maxErrPos };
+}
+
 // Build a document from a parsed clip: a key at each of the clip's frames for every bone.
 // Positions are kept for bones the clip actually moves (e.g. Bip01, or a stance that plants the feet).
 export function docFromClip(set, ticksPerSecond, character, name) {

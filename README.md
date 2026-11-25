@@ -71,6 +71,7 @@ Then:
 | Interpolation | Select a key, then pick **In** and **Out**: Flat (hold, then snap), Linear (constant speed) or Cubic (ease). Between two keys the earlier key's Out and the later key's In apply. |
 | Overall speed | Plays faster or slower; baked into the export. |
 | Forward per loop | Root motion for walk-type clips (vanilla Bob_Walk: 0.945). 0 keeps it in place. |
+| Reduce keys | Vanilla clips are baked with a key on every frame. **Reduce keys** removes, per bone, every key the motion can be rebuilt without, within the tolerance (default 0.5°; higher = fewer keys). The timeline highlights the selected bone's remaining keys. |
 | Undo / redo | Ctrl+Z / Ctrl+Y |
 
 Work is autosaved in the app. **Export to mod…** exports the animation you're editing, using a vanilla

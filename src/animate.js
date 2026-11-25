@@ -1,6 +1,6 @@
 // Animate mode: ties the animation document, bone posing and the timeline together.
 import * as THREE from 'three';
-import { AnimDoc, docFromClip, FPS, MODES } from './editor.js';
+import { AnimDoc, docFromClip, reduceKeys, FPS, MODES } from './editor.js';
 import { Poser } from './posing.js';
 import { Timeline } from './timeline.js';
 import { parseX } from './xparser.js';
@@ -118,6 +118,16 @@ export function initAnimate(app) {
       bone.position.copy(bone.userData.rest.position);
       ed.doc.keyBone(name, frameNow(), bone.quaternion, ed.doc.posBones.has(name) ? bone.position : null);
     });
+  }
+
+  function reduce() {
+    const tol = Math.max(0.01, +$('edReduceTol').value || 0.5);
+    let r;
+    change(() => { r = reduceKeys(ed.doc, { angleTol: tol, posTol: tol * 0.002 }); });
+    timeline.selectedKey = null;
+    updateInterpUI();
+    const pct = r.before ? Math.round(100 - (r.after / r.before) * 100) : 0;
+    setStatus(`Reduced keys ${r.before} → ${r.after} (${pct}% fewer) · largest change ${r.maxErrorDeg.toFixed(2)}° · Ctrl+Z to undo`);
   }
 
   function deleteKey() {
@@ -293,6 +303,7 @@ export function initAnimate(app) {
   $('edExit').addEventListener('click', exit);
   $('edKey').addEventListener('click', keyPose);
   $('edDelete').addEventListener('click', deleteKey);
+  $('edReduce').addEventListener('click', reduce);
   $('edReset').addEventListener('click', resetBone);
   $('edUndo').addEventListener('click', undo);
   $('edRedo').addEventListener('click', redo);
