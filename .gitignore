@@ -1,0 +1,6 @@
+node_modules/
+dist/
+# Game files from Project Zomboid (The Indie Stone) must never be committed.
+testdata/
+src/testdata
+*.log

@@ -1,0 +1,38 @@
+{
+  "name": "pz-animator",
+  "version": "0.2.0",
+  "description": "Standalone animation tool for Project Zomboid",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "dist": "electron-builder --win zip"
+  },
+  "license": "MIT",
+  "build": {
+    "appId": "local.pzanimator",
+    "productName": "PZ Animator",
+    "files": [
+      "main.js",
+      "preload.js",
+      "src/**/*",
+      "!src/testdata",
+      "!src/testdata/**"
+    ],
+    "win": {
+      "target": "zip",
+      "signAndEditExecutable": false
+    },
+    "directories": {
+      "output": "dist"
+    }
+  },
+  "devDependencies": {
+    "electron": "^33.4.11",
+    "electron-builder": "^25.1.8"
+  },
+  "author": "EddyNeave",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/EddyNeave/pz-animator.git"
+  }
+}
