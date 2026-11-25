@@ -4,3 +4,5 @@ dist/
 testdata/
 src/testdata
 *.log
+# Test screenshots (show game assets)
+*.png

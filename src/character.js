@@ -111,11 +111,27 @@ export function resetPose(character) {
 }
 
 // Convert a parsed AnimationSet into a three.js AnimationClip for preview playback.
-export function clipFromSet(set, ticksPerSecond, bones, { includeRootMotion = false } = {}) {
+// "Keep base skeleton": which bones keep their animated position. Everything else keeps the
+// loaded model's bone lengths, so a clip can't bring its own body proportions along.
+// Root-level bones (e.g. Bip01: hip bob and sway) and Translation_Data (forward motion) keep
+// their movement because that's part of the motion, not the proportions.
+export function animatedPositionBones(bones) {
+  const keep = new Set(['Translation_Data']);
+  for (const b of bones.values()) {
+    let depth = 0;
+    for (let p = b.parent; p && p.isBone; p = p.parent) depth++;
+    if (depth <= 1) keep.add(b.name);
+  }
+  return keep;
+}
+
+export function clipFromSet(set, ticksPerSecond, bones, { includeRootMotion = false, keepBaseSkeleton = false } = {}) {
   const tracks = [];
   let maxT = 0;
+  const keepPos = keepBaseSkeleton ? animatedPositionBones(bones) : null;
   for (const t of set.tracks) {
     if (!bones.has(t.bone)) continue;
+    const lockProportions = keepPos && !keepPos.has(t.bone);
     if (t.rot) {
       const times = t.rot.times.map(x => x / ticksPerSecond);
       const vals = [];
@@ -127,12 +143,12 @@ export function clipFromSet(set, ticksPerSecond, bones, { includeRootMotion = fa
       tracks.push(new THREE.QuaternionKeyframeTrack(`${t.bone}.quaternion`, times, vals));
       maxT = Math.max(maxT, times[times.length - 1]);
     }
-    if (t.pos && (includeRootMotion || t.bone !== 'Translation_Data')) {
+    if (t.pos && !lockProportions && (includeRootMotion || t.bone !== 'Translation_Data')) {
       const times = t.pos.times.map(x => x / ticksPerSecond);
       tracks.push(new THREE.VectorKeyframeTrack(`${t.bone}.position`, times, t.pos.values));
       maxT = Math.max(maxT, times[times.length - 1]);
     }
-    if (t.scale) {
+    if (t.scale && !lockProportions) {
       const times = t.scale.times.map(x => x / ticksPerSecond);
       tracks.push(new THREE.VectorKeyframeTrack(`${t.bone}.scale`, times, t.scale.values));
     }
@@ -155,5 +171,43 @@ export function animFromSet(set, ticksPerSecond, name = set.name) {
       scale: t.scale && { times: t.scale.times.slice(), values: t.scale.values.slice() },
       pos: t.pos && { times: t.pos.times.slice(), values: t.pos.values.slice() },
     })),
+  };
+}
+
+// Apply "Keep base skeleton" to an editor-form animation for export: non-root bones get the loaded
+// model's rest offsets (and rest scale) at every key, exactly what the viewer shows.
+export function applyBaseSkeleton(anim, bones) {
+  const keep = animatedPositionBones(bones);
+  return {
+    ...anim,
+    tracks: anim.tracks.map(t => {
+      const b = bones.get(t.bone);
+      if (!b || keep.has(t.bone)) return t;
+      const r = b.userData.rest;
+      const fill = (track, v) => track && { times: track.times.slice(), values: track.times.flatMap(() => [v.x, v.y, v.z]) };
+      return { ...t, pos: fill(t.pos, r.position), scale: fill(t.scale, r.scale) };
+    }),
+  };
+}
+
+// Forward (root) motion of a clip, from its Translation_Data track.
+export function forwardMotion(set, ticksPerSecond) {
+  const t = set.tracks.find(t => t.bone === 'Translation_Data');
+  if (!t || !t.pos || t.pos.times.length < 2) return { distance: 0, duration: 0, speed: 0 };
+  const v = t.pos.values, n = t.pos.times.length;
+  const distance = Math.hypot(v[(n - 1) * 3] - v[0], v[(n - 1) * 3 + 1] - v[1], v[(n - 1) * 3 + 2] - v[2]);
+  const duration = (t.pos.times[n - 1] - t.pos.times[0]) / ticksPerSecond;
+  return { distance, duration, speed: duration > 0 ? distance / duration : 0 };
+}
+
+// Scale an editor-form animation's forward motion by k (used by "Match vanilla speed").
+export function scaleForwardMotion(anim, k) {
+  return {
+    ...anim,
+    tracks: anim.tracks.map(t => {
+      if (t.bone !== 'Translation_Data' || !t.pos) return t;
+      const v = t.pos.values, o = v.slice(0, 3);
+      return { ...t, pos: { times: t.pos.times.slice(), values: v.map((x, i) => o[i % 3] + (x - o[i % 3]) * k) } };
+    }),
   };
 }

@@ -66,3 +66,10 @@ label.inline { display: inline-flex; }
 #exFiles { margin: 0; padding: 6px 10px 6px 24px; background: #1a1c20; border: 1px solid var(--line); border-radius: 5px; min-height: 24px; word-break: break-all; }
 .exmsg { font-size: 12px; min-height: 16px; } .exmsg.error { color: var(--danger); } .exmsg.ok { color: #7cc47c; }
 button:disabled { opacity: .45; cursor: default; }
+
+label.check { justify-content: flex-start; color: var(--text); gap: 6px; }
+#usedBy { max-height: 150px; overflow: auto; border: 1px solid var(--line); border-radius: 5px; background: #1a1c20; padding: 4px 6px; font-size: 11px; flex: none; }
+#usedBy .use { padding: 2px 0; border-bottom: 1px solid #24272c; } #usedBy .use:last-child { border-bottom: none; }
+#usedBy .node { color: var(--text); } #usedBy .role { color: var(--muted); }
+#usedByTitle { margin-top: 2px; }
+.uselist { margin: 0; padding: 4px 8px 4px 22px; font-size: 11px; color: var(--muted); max-height: 110px; overflow: auto; }

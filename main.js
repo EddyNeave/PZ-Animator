@@ -131,6 +131,7 @@ async function describeMod(modsDir, folder) {
     name: info.name || folder,
     id: info.id || '',
     layout: hasB42 ? 'b42' : 'flat',
+    infoText: infoText || '',
     mediaRel: hasB42 ? '42/media' : 'media',
   };
 }

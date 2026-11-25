@@ -1,7 +1,8 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/OrbitControls.js';
 import { parseX } from './xparser.js';
-import { buildCharacter, clipFromSet, resetPose } from './character.js';
+import { buildCharacter, clipFromSet, resetPose, forwardMotion } from './character.js';
+import { buildRefIndex, describeUse } from './refs.js';
 import { pickFolder, indexFolder, FileIndex, isDesktop } from './fsbridge.js';
 import { initExport } from './exportui.js';
 
@@ -59,6 +60,8 @@ const state = {
   playing: false,
   animPath: null,
   cache: new Map(),
+  keepBase: (() => { try { return localStorage.getItem('pzKeepBase') !== '0'; } catch { return true; } })(),
+  refs: null,
 };
 const textureLoader = new THREE.TextureLoader();
 const clock = new THREE.Clock();
@@ -93,6 +96,7 @@ async function openFolder(folder) {
     $('modelSection').classList.remove('disabled');
     $('animSection').classList.remove('disabled');
     buildAnimList();
+    scanRefs();
     refreshSkinOptions();
     await rebuildCharacter();
     const defaultAnim = state.index.find('Bob_Walk.x', 'anims_x/');
@@ -211,25 +215,13 @@ async function replayCurrent() {
   else if (state.animPath) await playAnim(state.animPath, state.resumeTime || 0);
 }
 
-// The game swaps Bob_ animations for Kate_ ones on female characters when one exists.
-function genderVariant(rel) {
-  if (state.gender !== 'female') return rel;
-  const slash = rel.lastIndexOf('/');
-  const base = rel.slice(slash + 1);
-  if (!/^bob_/i.test(base)) return rel;
-  const kate = (rel.slice(0, slash + 1) + 'Kate_' + base.slice(4)).toLowerCase();
-  return state.index.byLower.get(kate) || rel;
-}
-
 async function playAnim(rel, startTime = 0) {
   try {
     state.animPath = rel;
     state.customAnim = null;
-    const actual = state.customModel ? rel : genderVariant(rel);
-    const x = await loadX(actual);
-    const note = actual !== rel ? ` (female variant: ${actual.split('/').pop()})` : '';
-    state.current = { x, rel, actualRel: actual, label: null };
-    playParsed(x, null, startTime, note);
+    const x = await loadX(rel);
+    state.current = { x, rel, actualRel: rel, label: null };
+    playParsed(x, null, startTime);
     highlightAnim(rel);
   } catch (e) {
     console.error(e);
@@ -244,7 +236,7 @@ function playParsed(x, label, startTime = 0, note = '') {
   resetPose(state.character);
   state.mixer.stopAllAction();
   if (state.clip) state.mixer.uncacheClip(state.clip);
-  state.clip = clipFromSet(set, x.ticksPerSecond, state.character.bones);
+  state.clip = clipFromSet(set, x.ticksPerSecond, state.character.bones, { keepBaseSkeleton: state.keepBase });
   const matched = new Set(state.clip.tracks.map(t => t.name.split('.')[0])).size;
   state.action = state.mixer.clipAction(state.clip);
   state.action.play();
@@ -256,7 +248,38 @@ function playParsed(x, label, startTime = 0, note = '') {
   // End-of-chain "Nub" bones exist in animation files but not in body meshes; ignore them.
   const total = set.tracks.filter(t => !/Nub$/i.test(t.bone)).length;
   const mismatch = matched < total ? ` · ${matched}/${total} bones match this model` : '';
-  setStatus(`${label ? label + ' · ' : ''}${set.name}${note} · ${Math.round(state.clip.duration * FPS)} frames${mismatch}`);
+  const fm = forwardMotion(set, x.ticksPerSecond);
+  const motion = fm.speed > 0.001 ? ` · moves ${fm.speed.toFixed(2)} units/s` : ' · in place';
+  setStatus(`${label ? label + ' · ' : ''}${set.name}${note} · ${Math.round(state.clip.duration * FPS)} frames${motion}${mismatch}`);
+  renderUsedBy();
+}
+
+// Name the game knows this clip by: the file name for game files, else the animation set name.
+export function currentClipName() {
+  if (!state.current) return null;
+  if (state.current.rel) return state.current.rel.split('/').pop().replace(/\.x$/i, '');
+  return state.current.x.animationSets[0]?.name || null;
+}
+
+function renderUsedBy() {
+  const box = $('usedBy');
+  const name = currentClipName();
+  if (!name) { box.innerHTML = ''; return; }
+  if (!state.refs) { box.innerHTML = '<div class="muted small">Scanning AnimSets…</div>'; return; }
+  const uses = state.refs.get(name.toLowerCase()) || [];
+  $('usedByTitle').textContent = `Used by (${uses.length})`;
+  if (!uses.length) { box.innerHTML = `<div class="muted small">No vanilla AnimSet node plays ${escapeHtml(name)} directly.</div>`; return; }
+  box.innerHTML = uses.map(u => `<div class="use" title="${escapeHtml(u.rel)}"><span class="node">${escapeHtml(u.set)}/${escapeHtml(u.node)}</span> <span class="role">${escapeHtml(describeUse(u))}</span></div>`).join('');
+}
+function escapeHtml(s) { return String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
+
+async function scanRefs() {
+  state.refs = null;
+  renderUsedBy();
+  try {
+    state.refs = await buildRefIndex(state.index);
+  } catch (e) { console.error(e); state.refs = new Map(); }
+  renderUsedBy();
 }
 
 // ---------- drag and drop ----------
@@ -362,9 +385,6 @@ function buildAnimList() {
     const parts = p.split('/');
     return { path: p, name: parts[parts.length - 1].replace(/\.x$/i, ''), dir: parts.slice(1, -1).join('/') };
   });
-  // Hide Kate_ duplicates of Bob_ animations; they are picked automatically for females.
-  const names = new Set(animEntries.map(e => (e.dir + '/' + e.name).toLowerCase()));
-  animEntries = animEntries.filter(e => !(/^kate_/i.test(e.name) && names.has((e.dir + '/bob_' + e.name.slice(5)).toLowerCase())));
   animEntries.sort((a, b) => a.name.localeCompare(b.name));
   renderAnimList();
 }
@@ -425,6 +445,18 @@ segHandler('typeSeg', 'type', async () => { refreshSkinOptions(); await applyTex
 $('skinSel').addEventListener('change', () => { state.skinChosenForCustom = true; applyTexture(); });
 $('rotSel').addEventListener('change', applyTexture);
 $('animSearch').addEventListener('input', renderAnimList);
+$('keepBase').checked = state.keepBase;
+$('keepBase').addEventListener('change', () => setKeepBase($('keepBase').checked));
+function setKeepBase(on) {
+  state.keepBase = on;
+  try { localStorage.setItem('pzKeepBase', on ? '1' : '0'); } catch {}
+  $('keepBase').checked = on;
+  if (state.current && state.action) {
+    const t = state.action.time, playing = state.playing;
+    playParsed(state.current.x, state.current.label, t);
+    setPlaying(playing);
+  }
+}
 $('animList').addEventListener('click', (e) => {
   const li = e.target.closest('li');
   if (li) playAnim(li.dataset.path);
@@ -475,7 +507,7 @@ renderer.setAnimationLoop(() => {
   renderer.render(scene, camera);
 });
 
-initExport({ state, setStatus });
+initExport({ state, setStatus, setKeepBase, currentClipName });
 
 // Test hooks (used by automated render checks).
 window.__pz = { state, openFolder, handleDrop, playAnim, rebuildCharacter, applyTexture, camera, controls, setPlaying,

@@ -50,6 +50,11 @@
       <input id="animSearch" type="search" placeholder="Search vanilla animations…">
       <div class="muted small" id="animCount"></div>
       <ul id="animList"></ul>
+      <label class="check" title="Bones keep the loaded model's lengths; only rotations (plus hip and forward motion) come from the animation. Export uses the same rule.">
+        <input type="checkbox" id="keepBase"> Keep base skeleton
+      </label>
+      <h2 id="usedByTitle">Used by</h2>
+      <div id="usedBy"></div>
     </section>
   </aside>
 
@@ -75,7 +80,11 @@
           <label class="radio"><input type="radio" name="exMode" value="replace" checked> Replace a vanilla animation (same name)</label>
           <label class="radio"><input type="radio" name="exMode" value="node"> Add a new node based on a vanilla one</label>
           <div id="exModeNote" class="note"></div>
+          <div id="exUses" class="hidden"><div id="exUsesTitle" class="note warn"></div><ul id="exUsesList" class="uselist"></ul></div>
+          <div id="exSpeedNote" class="note"></div>
+          <label id="exMatchRow" class="radio hidden"><input type="checkbox" id="exMatchSpeed" checked> Match vanilla speed (scale the forward motion to the vanilla clip's)</label>
         </fieldset>
+        <label class="radio" title="Same setting as in the viewer"><input type="checkbox" id="exKeepBase"> Keep base skeleton (bone lengths from the loaded model, as previewed)</label>
 
         <div id="exNodeBox" class="hidden sub">
           <input id="exNodeSearch" type="search" placeholder="Search vanilla nodes, e.g. actions/ or cow/idle">
@@ -85,7 +94,7 @@
           <label id="exCondRow" class="hidden"><span id="exCondLabel"></span> <input id="exCondValue" spellcheck="false"></label>
         </div>
 
-        <label id="exKateRow" class="radio hidden"><input type="checkbox" id="exKate"> Also write a Kate_ copy (female characters use Kate_ versions)</label>
+        <label id="exKateRow" class="radio hidden"><input type="checkbox" id="exKate"> Also write a Kate_ copy (rarely needed: the game appears to use Bob_ clips for both sexes)</label>
 
         <fieldset>
           <div class="row"><span class="muted small">Mods folder:</span> <span id="exModsDir" class="small mono grow"></span> <button id="exModsDirBtn">Change…</button></div>

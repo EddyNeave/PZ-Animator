@@ -37,9 +37,16 @@ Left mouse is reserved for bone posing.
 
 - Finds `MaleBody.x` / `FemaleBody.x` and the body textures automatically.
 - Female / Male, Human / Zombie, skin 01–05 (zombie 01–04), zombie rot levels 1–3.
-- Lists every `.x` animation in `media/anims_X`, searchable. Picking a `Bob_` animation
-  on a female character plays the `Kate_` version when one exists, like the game does.
+- Lists every `.x` animation in `media/anims_X`, searchable.
 - Scrub, play/pause and preview speed.
+- **Keep base skeleton** (on by default): bones keep the loaded model's lengths and only rotations come
+  from the animation (the root bone's hip motion and `Translation_Data` forward motion are kept). Some clips
+  carry their own proportions, which in-game makes the body rise and sink as the game fades between clips.
+  Export uses the same rule, so the preview matches the exported file.
+- **Used by:** lists every vanilla AnimSet node that plays the current clip (main clip, part of a blend, or a
+  transition), so you can see what replacing it will affect.
+- **Forward speed:** shows how fast a clip moves the character. PZ moves characters by the animation's root
+  motion, so a clip's stride sets walking speed.
 - **Drag and drop** files onto the window:
   - `.png` / `.jpg`: used as the texture on the current model.
   - `.x` model: replaces the character (its texture is found among the dropped files, then in your game folder).
@@ -56,10 +63,20 @@ Play an animation, then click **Export to mod…**:
   `cow/idle/idle1.xml`). It's copied next to the original with your animation name and condition value; events
   and transitions are kept. Nodes that `x_extends` another file keep their `x_name` IDs (that's how overrides
   match the parent); stand-alone copies get fresh IDs.
-- **Kate_ copy:** for `Bob_` animations, also writes the `Kate_` version female characters use.
+- **Replace warnings:** the dialog lists every vanilla node that uses the clip, and compares forward speed
+  with the vanilla clip. **Match vanilla speed** scales the forward motion so the game keeps the speeds it
+  expects (a slower walk can otherwise turn sprint into an injured walk, for example).
+- **Kate_ copy:** optional, off by default. The game appears to use `Bob_` clips for both sexes.
 - **Target:** a new mod (creates `42/mod.info` and `common/`) or an existing one in your mods folder
-  (default `<your user folder>\Zomboid\mods`). Mods with a `42` folder get files there; old-layout mods get them
-  in their root `media` folder. Existing files are never overwritten without confirming.
+  (default `<your user folder>\Zomboid\mods`). Build 42 ignores mods without a `42` folder, so for old-layout
+  mods the tool adds one and copies `mod.info` into it. Existing files are never overwritten without confirming.
+
+> **Restart the game after exporting.** Animations load at startup, so enabling a mod mid-session won't show
+> the change.
+
+Replacing a clip affects every node that uses it. Replace is safest for one-off action clips (a reload, digging);
+for anything custom, adding a new node leaves vanilla behaviour alone. Movement clips (walk, run) feed into
+injury, sneaking and weapon blends.
 
 ## Running from source (any OS)
 
@@ -86,6 +103,7 @@ Copy those from your own install; game files are git-ignored and must never be c
 - `src/xwriter.js`: writes animation `.x` files (keeps a vanilla file's header and skeleton, regenerates
   the AnimationSet). Round-tripping a vanilla animation reproduces it exactly.
 - `src/exporter.js` / `src/exportui.js`: builds and writes mod files; the export dialog.
+- `src/refs.js`: indexes which AnimSet nodes use which clips.
 - `src/app.js`: UI.
 
 ## Roadmap
@@ -93,6 +111,7 @@ Copy those from your own install; game files are git-ignored and must never be c
 - [x] Viewer: male / female / zombie, skins, rot levels, vanilla animation browser
 - [x] Drag-and-drop models, textures and animations
 - [x] Export to a new or existing mod (replace vanilla, or new node from a vanilla template)
+- [x] Keep base skeleton, Used by panel, forward speed warnings and Match vanilla speed
 - [ ] Bone posing (drag a joint to rotate), auto-key, timeline that grows with keys
 - [ ] Per-key interpolation: flat / linear / cubic, separately in and out
 - [ ] Overall speed setting written to the node
