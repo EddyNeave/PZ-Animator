@@ -20,8 +20,10 @@ export function ease(u, out, inn) {
 const _qa = new THREE.Quaternion(), _qb = new THREE.Quaternion();
 
 export class AnimDoc {
-  constructor({ name = 'Bob_MyAnimation', speed = 1, forward = 0 } = {}) {
+  constructor({ name = 'Bob_MyAnimation', speed = 1, forward = 0, loop = false, loopGap = 10 } = {}) {
     this.name = name;
+    this.loop = loop;         // when on, a live copy of the start pose sits loopGap frames after the last key
+    this.loopGap = loopGap;
     this.speed = speed;       // overall speed, baked into the export
     this.forward = forward;   // forward (root) motion per loop, in units
     this.frames = new Map();  // frame -> { in, out }
@@ -29,11 +31,13 @@ export class AnimDoc {
     this.posBones = new Set(); // bones whose keys also store a position
   }
 
-  lastFrame() {
+  realLastFrame() {
     let m = 0;
     for (const f of this.frames.keys()) m = Math.max(m, f);
     return m;
   }
+  loopFrame() { return this.realLastFrame() + Math.max(1, Math.round(this.loopGap)); }
+  lastFrame() { return this.loop ? this.loopFrame() : this.realLastFrame(); }
 
   sortedFrames() { return [...this.frames.keys()].sort((a, b) => a - b); }
 
@@ -86,9 +90,19 @@ export class AnimDoc {
 
   // Pose of one bone at (fractional) frame t, or null if the bone has no keys.
   evaluateBone(bone, t, outQ, outP) {
-    const ch = this.channels.get(bone);
-    if (!ch || !ch.size) return false;
-    const keys = [...ch.keys()].sort((a, b) => a - b);
+    const ch0 = this.channels.get(bone);
+    if (!ch0 || !ch0.size) return false;
+    let ch = ch0;
+    const keys = [...ch0.keys()].sort((a, b) => a - b);
+    if (this.loop) {
+      // Virtual key at the loop frame: a copy of this bone's first key.
+      const lf = this.loopFrame();
+      if (lf > keys[keys.length - 1]) {
+        ch = new Map(ch0);
+        ch.set(lf, ch0.get(keys[0]));
+        keys.push(lf);
+      }
+    }
     let a = keys[0], b = keys[keys.length - 1];
     if (t <= a) b = a;
     else if (t >= b) a = b;
@@ -97,7 +111,8 @@ export class AnimDoc {
     }
     const ka = ch.get(a), kb = ch.get(b);
     let s = 0;
-    if (b !== a) s = ease((t - a) / (b - a), this.frames.get(a)?.out || 'cubic', this.frames.get(b)?.in || 'cubic');
+    const modes = (f) => this.frames.get(f) || (this.loop && f === this.loopFrame() ? this.frames.get(keys[0]) : null);
+    if (b !== a) s = ease((t - a) / (b - a), modes(a)?.out || 'cubic', modes(b)?.in || 'cubic');
     _qa.fromArray(ka.q); _qb.fromArray(kb.q);
     if (_qa.dot(_qb) < 0) _qb.set(-_qb.x, -_qb.y, -_qb.z, -_qb.w); // shortest path
     outQ.copy(_qa).slerp(_qb, s);
@@ -125,7 +140,7 @@ export class AnimDoc {
 
   toJSON() {
     return {
-      name: this.name, speed: this.speed, forward: this.forward,
+      name: this.name, speed: this.speed, forward: this.forward, loop: this.loop, loopGap: this.loopGap,
       frames: [...this.frames],
       channels: [...this.channels].map(([b, ch]) => [b, [...ch]]),
       posBones: [...this.posBones],

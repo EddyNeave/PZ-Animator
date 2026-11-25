@@ -65,9 +65,12 @@
       <div class="edrow">
         <button id="edKey" title="Key every bone at this frame (K)">Key pose</button>
         <button id="edDelete" title="Delete the selected keyframe (Del)">Delete key</button>
+        <button id="edCopy" title="Copy the selected keyframe, or the current pose if no key is selected (Ctrl+C)">Copy</button>
+        <button id="edPaste" title="Paste at the current frame (Ctrl+V)">Paste</button>
         <span class="sep"></span>
         <select id="edBone" title="Selected bone (or click a joint handle)"></select>
         <button id="edReset" title="Put the selected bone back to its rest pose and key it">Reset bone</button>
+        <label class="inline check" title="Dragging a wrist or ankle moves the whole arm/leg; moving the hips keeps the feet planted"><input type="checkbox" id="edIK" checked> IK hands &amp; feet</label>
         <span class="sep"></span>
         <div id="edInterp" class="disabled">
           <span id="edKeyLabel" class="muted small">No key selected</span>
@@ -82,10 +85,11 @@
       </div>
       <div class="edrow">
         <label class="inline">Name <input id="edName" spellcheck="false" style="width:170px"></label>
+        <label class="inline check" title="Keep a live copy of the start pose at the end, so the animation loops seamlessly. Drag the 'loop' marker on the timeline to change the gap."><input type="checkbox" id="edLoop"> Loop</label>
         <label class="inline" title="How far the character moves forward per loop (units). 0 = in place. Vanilla Bob_Walk is 0.945.">Forward per loop <input id="edForward" type="number" min="0" step="0.05" style="width:70px"></label>
         <button id="edReduce" title="Per bone, remove keys the motion can be rebuilt without, within the tolerance. Undo with Ctrl+Z.">Reduce keys</button>
         <label class="inline" title="Largest allowed change in rotation (degrees). Higher = fewer keys.">within <input id="edReduceTol" type="number" min="0.05" max="10" step="0.25" value="0.5" style="width:56px">°</label>
-        <span class="muted small">Drag a joint to rotate its bone · Shift+drag twists · orange handle moves the hips · moving a bone keys it · ←/→ step frames</span>
+        <span class="muted small">Drag a joint to rotate its bone · Shift+drag twists · with IK, wrists/ankles move the limb and the hips keep feet planted · moving a bone keys it · ←/→ step frames</span>
       </div>
       <canvas id="timeline"></canvas>
     </div>

@@ -56,7 +56,7 @@ In Animate mode, left mouse poses bones (see below).
 ## Animating
 
 Click **Animate…** and choose:
-- **New animation** (from the rest pose), **New, from the current frame** (the pose the preview shows),
+- **New animation** (from the rest pose; for the PZ bodies that's the first frame of `Bob_Idle`), **New, from the current frame** (the pose the preview shows),
   **Edit a copy** of the playing clip (every frame becomes editable keys), or **Resume** the autosaved one.
 
 Then:
@@ -65,7 +65,10 @@ Then:
 |---|---|
 | Rotate a bone | Drag the handle at the end of the bone (its joint). The bone points at the mouse. |
 | Twist a bone | Shift + drag a handle |
-| Move the hips / whole body | Drag the orange handle |
+| Move the hips / whole body | Drag the orange handle. With **IK hands & feet** on, the feet stay planted (easy crouches). |
+| IK (hands and feet) | With **IK hands & feet** on, dragging a wrist or ankle handle moves the whole arm or leg; the elbow/knee keeps its bend direction and the hand/foot keeps its orientation. |
+| Copy / paste | Select a key and Ctrl+C (or **Copy**) copies it; with no key selected it copies the current pose. Ctrl+V (or **Paste**) keys it at the current frame. |
+| Loop | **Loop** keeps a live copy of the start pose after your last key, so the animation loops seamlessly even as you edit frame 0. Drag the timeline's *loop* marker to change the gap. |
 | Key | Moving a bone keys it at the current frame (auto-key). **Key pose** (K) keys every bone. |
 | Timeline | Click or drag to scrub, ←/→ step a frame. Click a key to select it, drag it to retime, Delete to remove. The timeline grows as you add keys; the last key is the loop point. |
 | Interpolation | Select a key, then pick **In** and **Out**: Flat (hold, then snap), Linear (constant speed) or Cubic (ease). Between two keys the earlier key's Out and the later key's In apply. |
@@ -142,6 +145,7 @@ Copy those from your own install; game files are git-ignored and must never be c
 - [x] Bone posing (drag a joint to rotate, Shift to twist, hip move), auto-key, timeline that grows with keys
 - [x] Per-key interpolation: flat / linear / cubic, separately in and out
 - [x] Overall speed and forward motion, undo/redo, autosave
+- [x] Key reduction, IK for hands and feet (with planted feet), copy/paste keys, loop toggle, idle rest pose
 - [ ] Save / open animation project files
 - [ ] `.fbx` / `.glb` support
 

@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/OrbitControls.js';
 import { parseX } from './xparser.js';
-import { buildCharacter, clipFromSet, resetPose, forwardMotion } from './character.js';
+import { buildCharacter, clipFromSet, resetPose, forwardMotion, setRestFromClip } from './character.js';
 import { buildRefIndex, describeUse } from './refs.js';
 import { pickFolder, indexFolder, FileIndex, isDesktop } from './fsbridge.js';
 import { initExport } from './exportui.js';
@@ -203,6 +203,11 @@ async function setCharacter(bodyX) {
 
   state.character = buildCharacter(bodyX);
   state.characterX = bodyX;
+  // PZ bodies: rest pose = Bob_Idle's first frame (the body files' own pose is the walk's first frame).
+  if (!state.customModel && state.index) {
+    const idleRel = state.index.find('Bob_Idle.x', 'anims_x/');
+    if (idleRel) { try { setRestFromClip(state.character, await loadX(idleRel)); } catch (e) { console.warn('Idle rest pose failed', e); } }
+  }
   scene.add(state.character.root);
   state.skeletonHelper = new THREE.SkeletonHelper(state.character.root);
   state.skeletonHelper.visible = state.showBones;
@@ -496,7 +501,7 @@ function frameCharacter(fit = false) {
   controls.update();
 }
 window.addEventListener('keydown', (e) => {
-  if (e.target.matches('input, select, textarea')) return;
+  if (e.target.matches('input[type=text], input[type=number], input[type=search], input:not([type]), select, textarea')) return;
   if (e.code === 'Space') { e.preventDefault(); if (animate.active) animate.togglePlay(); else if (state.action) setPlaying(!state.playing); }
   if (e.key === 'f' || e.key === 'F') frameCharacter(!!state.customModel);
   if (e.key === 'b' || e.key === 'B') {

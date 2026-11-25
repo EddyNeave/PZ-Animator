@@ -211,3 +211,22 @@ export function scaleForwardMotion(anim, k) {
     }),
   };
 }
+
+// Use a clip's first frame as the rest pose (e.g. Bob_Idle for the PZ bodies). The rest pose is
+// what unkeyed bones, "Reset bone", new animations and exports start from. Skinning is unaffected.
+export function setRestFromClip(character, parsed) {
+  const set = parsed.animationSets[0];
+  if (!set) return 0;
+  let n = 0;
+  for (const t of set.tracks) {
+    const bone = character.bones.get(t.bone);
+    if (!bone) continue;
+    const r = bone.userData.rest;
+    if (t.rot) { const v = t.rot.values; r.quaternion.copy(xKeyToQuat(v[0], v[1], v[2], v[3])); }
+    if (t.pos) r.position.fromArray(t.pos.values, 0);
+    if (t.scale) r.scale.fromArray(t.scale.values, 0);
+    bone.position.copy(r.position); bone.quaternion.copy(r.quaternion); bone.scale.copy(r.scale);
+    n++;
+  }
+  return n;
+}

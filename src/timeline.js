@@ -2,11 +2,11 @@
 // (always a little past the last key, so there's room to add the next one).
 
 export class Timeline {
-  constructor(canvas, { getDoc, getFrame, setFrame, getBone, onSelectKey, onMoveKey }) {
+  constructor(canvas, { getDoc, getFrame, setFrame, getBone, onSelectKey, onMoveKey, onMoveLoop }) {
     this.c = canvas;
     this.g = canvas.getContext('2d');
     this.getDoc = getDoc; this.getFrame = getFrame; this.setFrame = setFrame; this.getBone = getBone;
-    this.onSelectKey = onSelectKey; this.onMoveKey = onMoveKey;
+    this.onSelectKey = onSelectKey; this.onMoveKey = onMoveKey; this.onMoveLoop = onMoveLoop;
     this.selectedKey = null;
     this.drag = null;
     this.pad = 14;
@@ -32,6 +32,7 @@ export class Timeline {
       const d = Math.abs(this.frameToX(f) - x);
       if (d < bestD) { bestD = d; best = f; }
     }
+    if (doc.loop && Math.abs(this.frameToX(doc.loopFrame()) - x) < bestD) best = 'loop';
     return best;
   }
 
@@ -39,7 +40,9 @@ export class Timeline {
     const r = this.c.getBoundingClientRect();
     const x = e.clientX - r.left, y = e.clientY - r.top;
     const k = y > 22 ? this.keyAt(x) : null;
-    if (k !== null) {
+    if (k === 'loop') {
+      this.drag = { mode: 'loop', to: this.getDoc().loopFrame() };
+    } else if (k !== null) {
       this.select(k);
       this.drag = { mode: 'key', from: k, to: k };
       this.setFrame(k);
@@ -64,6 +67,11 @@ export class Timeline {
     if (!this.drag) return;
     const d = this.drag;
     this.drag = null;
+    if (d.mode === 'loop') {
+      const doc = this.getDoc();
+      const gap = Math.max(1, d.to - doc.realLastFrame());
+      if (gap !== doc.loopGap) this.onMoveLoop?.(gap);
+    }
     if (d.mode === 'key' && d.to !== d.from) {
       if (this.onMoveKey?.(d.from, d.to)) { this.selectedKey = d.to; this.setFrame(d.to); }
     }
@@ -126,9 +134,17 @@ export class Timeline {
         g.stroke();
       }
       if (last > 0) { // loop point
-        const x = Math.round(this.frameToX(last)) + 0.5;
+        const lf = this.drag?.mode === 'loop' ? this.drag.to : last;
+        const x = Math.round(this.frameToX(lf)) + 0.5;
         g.strokeStyle = 'rgba(224,185,58,0.5)'; g.setLineDash([3, 3]);
         g.beginPath(); g.moveTo(x, 27); g.lineTo(x, H); g.stroke(); g.setLineDash([]);
+        if (doc.loop) { // live copy of the start pose: hollow diamond, drag to change the gap
+          const s = 6;
+          g.beginPath(); g.moveTo(x, y - s); g.lineTo(x + s, y); g.lineTo(x, y + s); g.lineTo(x - s, y); g.closePath();
+          g.lineWidth = 2; g.strokeStyle = '#e0b93a'; g.stroke(); g.lineWidth = 1;
+          g.fillStyle = '#e0b93a'; g.font = '10px system-ui, sans-serif'; g.textAlign = 'left';
+          g.fillText('loop', x + 8, y + 3);
+        }
       }
     }
     // Playhead.

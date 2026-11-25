@@ -11,6 +11,15 @@ const SKIP = new Set(['Dummy01', 'Translation_Data']);
 const HIP = 'Bip01';
 const VIRTUAL_END = 0.06; // length used for bones with no child (head, hands' last joints, props)
 
+// Two-bone IK chains, keyed by the bone whose end handle drives them (the wrist / ankle handle).
+const IK_CHAINS = {
+  Bip01_L_Forearm: ['Bip01_L_UpperArm', 'Bip01_L_Forearm', 'Bip01_L_Hand'],
+  Bip01_R_Forearm: ['Bip01_R_UpperArm', 'Bip01_R_Forearm', 'Bip01_R_Hand'],
+  Bip01_L_Calf: ['Bip01_L_Thigh', 'Bip01_L_Calf', 'Bip01_L_Foot'],
+  Bip01_R_Calf: ['Bip01_R_Thigh', 'Bip01_R_Calf', 'Bip01_R_Foot'],
+};
+const LEG_CHAINS = [IK_CHAINS.Bip01_L_Calf, IK_CHAINS.Bip01_R_Calf];
+
 function circleTexture() {
   const c = document.createElement('canvas');
   c.width = c.height = 64;
@@ -29,6 +38,7 @@ export class Poser {
     this.onSelect = onSelect; this.onBeginEdit = onBeginEdit; this.onEndEdit = onEndEdit;
     this.getCharacter = getCharacter;
     this.enabled = false;
+    this.ik = true;         // IK for hands and feet (wrist/ankle handles; hips keep feet planted)
     this.selected = null;   // bone name
     this.hover = null;
     this.drag = null;
@@ -150,6 +160,67 @@ export class Poser {
     return ray.ray.intersectPlane(plane, hit) ? hit : null;
   }
 
+  // Root-local rotation / position (the root mirrors Z, so all maths happens inside it).
+  rootLocal(obj) {
+    const ch = this.getCharacter();
+    const m = ch.root.matrixWorld.clone().invert().multiply(obj.matrixWorld);
+    const p = new THREE.Vector3(), q = new THREE.Quaternion();
+    m.decompose(p, q, new THREE.Vector3());
+    return { p, q };
+  }
+
+  // Capture a chain's starting state so every mouse move solves from the same start (no drift).
+  captureChain(names) {
+    const ch = this.getCharacter();
+    const bones = names.map(n => ch.bones.get(n));
+    if (bones.some(b => !b)) return null;
+    return {
+      bones,
+      startQ: bones.map(b => b.quaternion.clone()),
+      endRL: this.rootLocal(bones[2]).q,               // hand/foot orientation to keep
+      endWorld: bones[2].getWorldPosition(new THREE.Vector3()),
+    };
+  }
+
+  // Analytic two-bone IK: reach targetRL (root-local) with upper+mid, keeping the current bend
+  // plane, then restore the end bone's root-local orientation.
+  solveChain(c, targetRL) {
+    const ch = this.getCharacter();
+    const [up, mid, end] = c.bones;
+    up.quaternion.copy(c.startQ[0]); mid.quaternion.copy(c.startQ[1]); end.quaternion.copy(c.startQ[2]);
+    ch.root.updateMatrixWorld(true);
+    const U = this.rootLocal(up), M = this.rootLocal(mid), E = this.rootLocal(end);
+    const parentRL = up.parent?.isBone ? this.rootLocal(up.parent).q : new THREE.Quaternion();
+    const A = U.p, B = M.p, C = E.p;
+    const l1 = B.distanceTo(A), l2 = C.distanceTo(B);
+    const toT = targetRL.clone().sub(A);
+    const d = Math.min(Math.max(toT.length(), Math.abs(l1 - l2) + 1e-4), l1 + l2 - 1e-4);
+    const dir = toT.lengthSq() > 1e-12 ? toT.normalize() : C.clone().sub(A).normalize();
+    // Bend direction: keep the elbow/knee on the side it already points to.
+    let perp = B.clone().sub(A);
+    perp.sub(dir.clone().multiplyScalar(perp.dot(dir)));
+    if (perp.lengthSq() < 1e-10) {
+      const n = B.clone().sub(A).cross(C.clone().sub(A));
+      perp = n.lengthSq() > 1e-12 ? n.cross(dir) : new THREE.Vector3(0, 0, 1).cross(dir);
+    }
+    perp.normalize();
+    const cosA = Math.min(1, Math.max(-1, (l1 * l1 + d * d - l2 * l2) / (2 * l1 * d)));
+    const sinA = Math.sqrt(1 - cosA * cosA);
+    const B2 = A.clone().add(dir.clone().multiplyScalar(cosA * l1)).add(perp.clone().multiplyScalar(sinA * l1));
+    const T = A.clone().add(dir.clone().multiplyScalar(d));
+    // Upper bone: swing A->B onto A->B2.
+    const q1 = new THREE.Quaternion().setFromUnitVectors(B.clone().sub(A).normalize(), B2.clone().sub(A).normalize());
+    const upRL = q1.clone().multiply(U.q);
+    up.quaternion.copy(parentRL.clone().invert().multiply(upRL));
+    // Mid bone: after the swing it points from B2 to C1; swing that onto B2->T.
+    const C1 = C.clone().sub(A).applyQuaternion(q1).add(A);
+    const q2 = new THREE.Quaternion().setFromUnitVectors(C1.clone().sub(B2).normalize(), T.clone().sub(B2).normalize());
+    const midRL = q2.clone().multiply(q1.clone().multiply(M.q));
+    mid.quaternion.copy(upRL.clone().invert().multiply(midRL));
+    // End bone keeps its orientation (hand/foot stays as it was).
+    end.quaternion.copy(midRL.clone().invert().multiply(c.endRL));
+  }
+
   select(name) {
     this.selected = name;
     this.onSelect?.(name);
@@ -179,6 +250,8 @@ export class Poser {
       boneRL: rl(bone), parentRL: bone.parent?.isBone ? rl(bone.parent) : new THREE.Quaternion(),
       startHit: this.rayPoint(e.clientX, e.clientY, it.isHip ? pivot : tail),
       moved: false,
+      chain: this.ik && IK_CHAINS[it.bone] ? this.captureChain(IK_CHAINS[it.bone]) : null,
+      legs: this.ik && it.isHip ? LEG_CHAINS.map(n => this.captureChain(n)).filter(Boolean) : [],
     };
     this.onBeginEdit?.(it.bone);
     this.dom.setPointerCapture?.(e.pointerId);
@@ -204,6 +277,13 @@ export class Poser {
       const deltaRL = toRL(hit).sub(toRL(d.startHit));
       const local = deltaRL.applyQuaternion(d.parentRL.clone().invert());
       d.bone.position.copy(d.startPos).add(local);
+      // Keep the feet planted where they were.
+      for (const leg of d.legs) this.solveChain(leg, toRL(leg.endWorld));
+      return;
+    }
+    if (d.chain && !(d.twist || e.shiftKey)) {
+      const hit = this.rayPoint(e.clientX, e.clientY, d.tail);
+      if (hit) this.solveChain(d.chain, toRL(hit));
       return;
     }
     const pivotRL = toRL(d.pivot), tailRL = toRL(d.tail);
@@ -227,7 +307,10 @@ export class Poser {
     const d = this.drag;
     this.drag = null;
     this.dom.style.cursor = '';
-    this.onEndEdit?.(d.it.bone, d.moved, d.it.isHip);
+    const affected = new Set([d.it.bone]);
+    if (d.chain && !d.twist) d.chain.bones.forEach(b => affected.add(b.name));
+    for (const leg of d.legs) leg.bones.forEach(b => affected.add(b.name));
+    this.onEndEdit?.(d.it.bone, d.moved, d.it.isHip, [...affected]);
   }
 
   get dragging() { return !!this.drag; }
