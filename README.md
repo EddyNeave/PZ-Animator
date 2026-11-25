@@ -39,7 +39,7 @@ Left mouse is reserved for bone posing.
 - Female / Male, Human / Zombie, skin 01–05 (zombie 01–04), zombie rot levels 1–3.
 - Lists every `.x` animation in `media/anims_X`, searchable.
 - Scrub, play/pause and preview speed.
-- **Keep base skeleton** (on by default): bones keep the loaded model's lengths and only rotations come
+- **Keep base skeleton** (off by default; vanilla clips often move bones on purpose, e.g. planted feet): bones keep the loaded model's lengths and only rotations come
   from the animation (the root bone's hip motion and `Translation_Data` forward motion are kept). Some clips
   carry their own proportions, which in-game makes the body rise and sink as the game fades between clips.
   Export uses the same rule, so the preview matches the exported file.

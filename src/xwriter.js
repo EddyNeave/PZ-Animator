@@ -22,18 +22,26 @@ export function writeAnimationX(templateText, anim) {
     head = head.replace(/^(AnimTicksPerSecond\s*\{\s*)\d+/m, `$1${anim.ticksPerSecond}`);
   }
 
+  // Key order per bone follows the template: Build 42 vanilla files use S, R, T; some older
+  // files (e.g. Kate_Walk) use R, S, T.
+  const setText = templateText.slice(at);
+  const order = (setText.match(/AnimationKey\s+([SRT])\s*\{/g) || []).slice(0, 3).map(m => m.match(/AnimationKey\s+([SRT])/)[1]);
+  const keyOrder = order.length === 3 && new Set(order).size === 3 ? order : ['S', 'R', 'T'];
+
   const out = [head, `AnimationSet ${anim.name} {${NL} ${NL}`];
   for (const t of anim.tracks) {
     out.push(`${NL} Animation {${NL}  ${NL}  { ${t.bone} }${NL}`);
-    if (t.rot) {
-      const lines = t.rot.times.map((time, i) => {
-        const [w, x, y, z] = quatToXKey(t.rot.quats[i]);
-        return `   ${Math.round(time)};4;${f6(w)},${f6(x)},${f6(y)},${f6(z)};;`;
-      });
-      out.push(keyBlock('R', 0, lines));
+    for (const k of keyOrder) {
+      if (k === 'R' && t.rot) {
+        const lines = t.rot.times.map((time, i) => {
+          const [w, x, y, z] = quatToXKey(t.rot.quats[i]);
+          return `   ${Math.round(time)};4;${f6(w)},${f6(x)},${f6(y)},${f6(z)};;`;
+        });
+        out.push(keyBlock('R', 0, lines));
+      }
+      if (k === 'S' && t.scale) out.push(keyBlock('S', 1, vecLines(t.scale)));
+      if (k === 'T' && t.pos) out.push(keyBlock('T', 2, vecLines(t.pos)));
     }
-    if (t.scale) out.push(keyBlock('S', 1, vecLines(t.scale)));
-    if (t.pos) out.push(keyBlock('T', 2, vecLines(t.pos)));
     out.push(` }${NL}`);
   }
   out.push(`}`);

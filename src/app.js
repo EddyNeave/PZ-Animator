@@ -60,7 +60,7 @@ const state = {
   playing: false,
   animPath: null,
   cache: new Map(),
-  keepBase: (() => { try { return localStorage.getItem('pzKeepBase') !== '0'; } catch { return true; } })(),
+  keepBase: (() => { try { return localStorage.getItem('pzKeepBase') === '1'; } catch { return false; } })(),
   refs: null,
 };
 const textureLoader = new THREE.TextureLoader();
