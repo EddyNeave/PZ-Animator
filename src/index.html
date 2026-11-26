@@ -64,7 +64,8 @@
     <div id="editBar">
       <div class="edrow">
         <button id="edKey" title="Key every bone at this frame (K)">Key pose</button>
-        <button id="edDelete" title="Delete the selected keyframe (Del)">Delete key</button>
+        <button id="edDelete" title="Delete the selected bone's key at the selected keyframe or current frame (Del)">Delete key</button>
+        <button id="edDeleteFrame" title="Delete the whole keyframe for every bone (Shift+Del)">Delete frame</button>
         <button id="edCopy" title="Copy the selected keyframe, or the current pose if no key is selected (Ctrl+C)">Copy</button>
         <button id="edPaste" title="Paste at the current frame (Ctrl+V)">Paste</button>
         <span class="sep"></span>
@@ -85,8 +86,12 @@
       </div>
       <div class="edrow">
         <label class="inline">Name <input id="edName" spellcheck="false" style="width:170px"></label>
+        <label class="inline check" title="When a bone is keyed after frame 0 for the first time, also key frame 0 with the pose it had before, so the change doesn't leak back to the start"><input type="checkbox" id="edKeyStart" checked> Key start frame</label>
         <label class="inline check" title="Keep a live copy of the start pose at the end, so the animation loops seamlessly. Drag the 'loop' marker on the timeline to change the gap."><input type="checkbox" id="edLoop"> Loop</label>
         <label class="inline" title="How far the character moves forward per loop (units). 0 = in place. Vanilla Bob_Walk is 0.945.">Forward per loop <input id="edForward" type="number" min="0" step="0.05" style="width:70px"></label>
+        <label class="inline" title="Show the previous (blue) and next (orange) keyframe as a see-through ghost">Onion
+          <select id="edOnion"><option value="off">Off</option><option value="prev">Previous key</option><option value="both">Previous + next</option></select></label>
+        <label class="inline check" title="Show only the selected bone (its whole arm or leg for limb bones), using that bone's own keys"><input type="checkbox" id="edOnionBone"> Selected bone only</label>
         <button id="edReduce" title="Per bone, remove keys the motion can be rebuilt without, within the tolerance. Undo with Ctrl+Z.">Reduce keys</button>
         <label class="inline" title="Largest allowed change in rotation (degrees). Higher = fewer keys.">within <input id="edReduceTol" type="number" min="0.05" max="10" step="0.25" value="0.5" style="width:56px">°</label>
         <span class="muted small">Drag a joint to rotate its bone · Shift+drag twists · with IK, wrists/ankles move the limb and the hips keep feet planted · moving a bone keys it · ←/→ step frames</span>

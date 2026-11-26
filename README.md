@@ -67,10 +67,11 @@ Then:
 | Twist a bone | Shift + drag a handle |
 | Move the hips / whole body | Drag the orange handle. With **IK hands & feet** on, the feet stay planted (easy crouches). |
 | IK (hands and feet) | With **IK hands & feet** on, dragging a wrist or ankle handle moves the whole arm or leg; the elbow/knee keeps its bend direction and the hand/foot keeps its orientation. |
+| Onion skin | **Onion**: show the previous keyframe (blue) or previous + next (orange) as a see-through ghost. **Selected bone only** shows just that bone (its whole arm or leg for limb bones) using its own keys, handy for matching hands and feet. |
 | Copy / paste | Select a key and Ctrl+C (or **Copy**) copies it; with no key selected it copies the current pose. Ctrl+V (or **Paste**) keys it at the current frame. |
 | Loop | **Loop** keeps a live copy of the start pose after your last key, so the animation loops seamlessly even as you edit frame 0. Drag the timeline's *loop* marker to change the gap. |
-| Key | Moving a bone keys it at the current frame (auto-key). **Key pose** (K) keys every bone. |
-| Timeline | Click or drag to scrub, ←/→ step a frame. Click a key to select it, drag it to retime, Delete to remove. The timeline grows as you add keys; the last key is the loop point. |
+| Key | Moving a bone keys it at the current frame (auto-key). **Key pose** (K) keys every bone. With **Key start frame** on, the first time a bone is keyed after frame 0 it also gets a frame-0 key with the pose it had before, so the change doesn't leak back to the start. |
+| Timeline | Click or drag to scrub, ←/→ step a frame. Click a key to select it, drag it to retime. **Delete** removes the selected bone's key; **Shift+Delete** (or **Delete frame**) removes the whole keyframe for every bone. The timeline grows as you add keys; the last key is the loop point. |
 | Interpolation | Select a key, then pick **In** and **Out**: Flat (hold, then snap), Linear (constant speed) or Cubic (ease). Between two keys the earlier key's Out and the later key's In apply. |
 | Overall speed | Plays faster or slower; baked into the export. |
 | Forward per loop | Root motion for walk-type clips (vanilla Bob_Walk: 0.945). 0 keeps it in place. |
@@ -133,7 +134,7 @@ Copy those from your own install; game files are git-ignored and must never be c
 - `src/exporter.js` / `src/exportui.js`: builds and writes mod files; the export dialog.
 - `src/refs.js`: indexes which AnimSet nodes use which clips.
 - `src/editor.js`: the animation document: keys, interpolation, evaluation, baking for export.
-- `src/posing.js`, `src/timeline.js`, `src/animate.js`: joint handles and dragging, the timeline, Animate mode.
+- `src/posing.js`, `src/timeline.js`, `src/onion.js`, `src/animate.js`: joint handles, dragging and IK, the timeline, onion skin, Animate mode.
 - `src/app.js`: UI.
 
 ## Roadmap
@@ -146,6 +147,7 @@ Copy those from your own install; game files are git-ignored and must never be c
 - [x] Per-key interpolation: flat / linear / cubic, separately in and out
 - [x] Overall speed and forward motion, undo/redo, autosave
 - [x] Key reduction, IK for hands and feet (with planted feet), copy/paste keys, loop toggle, idle rest pose
+- [x] Onion skin, key start frame, per-bone delete
 - [ ] Save / open animation project files
 - [ ] `.fbx` / `.glb` support
 

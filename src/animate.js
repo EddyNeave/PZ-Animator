@@ -3,6 +3,7 @@ import * as THREE from 'three';
 import { AnimDoc, docFromClip, reduceKeys, FPS, MODES } from './editor.js';
 import { Poser } from './posing.js';
 import { Timeline } from './timeline.js';
+import { Onion } from './onion.js';
 import { parseX } from './xparser.js';
 
 const $ = (id) => document.getElementById(id);
@@ -32,6 +33,16 @@ export function initAnimate(app) {
   renderer.domElement.addEventListener('pointerdown', (e) => {
     if (ed.active && e.button === 0 && ed.playing) { setPlaying(false); applyPose(); }
   }, true);
+
+  const onion = new Onion({
+    scene,
+    getCharacter: () => state.character,
+    getCharacterX: () => state.characterX,
+    getDoc: () => ed.doc,
+    getFrame: () => ed.frame,
+    getSelected: () => poser.selected,
+    getTail: (name) => poser.items.find(i => i.bone === name)?.tailOf || null,
+  });
 
   const timeline = new Timeline($('timeline'), {
     getDoc: () => ed.doc,
@@ -90,11 +101,26 @@ export function initAnimate(app) {
   const frameNow = () => Math.max(0, Math.round(ed.frame));
 
   // Key every bone the drag changed (IK moves a whole limb; hips with IK also move the legs).
+  // "Key start frame": the first time a bone is keyed after frame 0, also key frame 0 with the pose
+  // it had before the change, so the new pose doesn't leak back to the start.
+  function keyStart(name, f, withPos, beforeDoc) {
+    if (!$('edKeyStart').checked || f <= 0 || ed.doc.boneHasKey(name, 0)) return;
+    const bone = state.character.bones.get(name);
+    const r = bone.userData.rest;
+    const q = new THREE.Quaternion(), p = new THREE.Vector3();
+    const res = beforeDoc.evaluateBone(name, 0, q, p);
+    const startQ = res ? q : r.quaternion;
+    const startP = res === 'both' ? p : r.position;
+    ed.doc.keyBone(name, 0, startQ, withPos ? startP : null);
+  }
+
   function autoKey(boneNames, hipBone) {
     const f = frameNow();
+    const beforeDoc = AnimDoc.fromJSON(JSON.parse(ed.before));
     for (const name of boneNames) {
       const bone = state.character.bones.get(name);
       const withPos = name === hipBone || ed.doc.posBones.has(name);
+      keyStart(name, f, withPos, beforeDoc);
       ed.doc.keyBone(name, f, bone.quaternion, withPos ? bone.position : null);
     }
     commit(ed.before);
@@ -105,10 +131,13 @@ export function initAnimate(app) {
   function keyPose() {
     change(() => {
       const f = frameNow();
+      const beforeDoc = ed.doc.clone();
       for (const [name, bone] of state.character.bones) {
         if (name === 'Translation_Data' || name === 'Dummy01') continue;
         const moved = bone.position.distanceTo(bone.userData.rest.position) > 0.0005;
-        ed.doc.keyBone(name, f, bone.quaternion, name === 'Bip01' || moved || ed.doc.posBones.has(name) ? bone.position : null);
+        const withPos = name === 'Bip01' || moved || ed.doc.posBones.has(name);
+        keyStart(name, f, withPos, beforeDoc);
+        ed.doc.keyBone(name, f, bone.quaternion, withPos ? bone.position : null);
       }
       timeline.selectedKey = f;
     });
@@ -161,8 +190,10 @@ export function initAnimate(app) {
     const f = frameNow();
     const q = new THREE.Quaternion(), p = new THREE.Vector3();
     change(() => {
+      const beforeDoc = ed.doc.clone();
       for (const [name, k] of clipboard.bones) {
         if (!state.character.bones.has(name)) continue;
+        keyStart(name, f, !!k.p || ed.doc.posBones.has(name), beforeDoc);
         ed.doc.keyBone(name, f, q.fromArray(k.q), k.p ? p.fromArray(k.p) : null);
       }
       if (clipboard.modes) Object.assign(ed.doc.ensureFrame(f), clipboard.modes);
@@ -172,12 +203,25 @@ export function initAnimate(app) {
     setStatus(`Pasted ${clipboard.bones.length} bones at frame ${f}.`);
   }
 
+  // Delete: the selected bone's key (at the selected keyframe, else the current frame).
+  // Shift+Delete / "Delete frame": the whole keyframe for every bone.
   function deleteKey() {
-    const k = timeline.selectedKey;
-    if (k == null || !ed.doc.frames.has(k)) return;
+    const bone = poser.selected;
+    const k = timeline.selectedKey != null && ed.doc.frames.has(timeline.selectedKey) ? timeline.selectedKey : frameNow();
+    if (!bone) { setStatus('Select a bone first (or Shift+Delete to delete the whole keyframe).', true); return; }
+    if (!ed.doc.boneHasKey(bone, k)) { setStatus(`${bone.replace(/^Bip01_?/, '') || 'Bip01'} has no key at frame ${k}.`, true); return; }
+    change(() => ed.doc.deleteBoneKey(bone, k));
+    if (!ed.doc.frames.has(k)) timeline.selectedKey = null;
+    updateInterpUI();
+    setStatus(`Deleted ${bone.replace(/^Bip01_?/, '') || 'Bip01'}'s key at frame ${k}.`);
+  }
+  function deleteFrame() {
+    const k = timeline.selectedKey != null && ed.doc.frames.has(timeline.selectedKey) ? timeline.selectedKey : frameNow();
+    if (!ed.doc.frames.has(k)) { setStatus(`No keyframe at frame ${k}.`, true); return; }
     change(() => ed.doc.deleteFrame(k));
     timeline.selectedKey = null;
     updateInterpUI();
+    setStatus(`Deleted keyframe ${k} (all bones).`);
   }
 
   // ---------- pose / playback ----------
@@ -204,6 +248,7 @@ export function initAnimate(app) {
     // While dragging, the poser owns the bones (IK moves several at once), so don't re-apply keys.
     if (!poser.dragging) applyPose();
     poser.update();
+    onion.update();
     return true;
   }
 
@@ -307,6 +352,7 @@ export function initAnimate(app) {
     $('animateDlg').classList.add('hidden');
     poser.setEnabled(true);
     poser.rebuild();
+    onion.build();
     fillBoneList();
     syncFields();
     timeline.selectedKey = null;
@@ -319,6 +365,7 @@ export function initAnimate(app) {
     ed.active = false;
     ed.playing = false;
     poser.setEnabled(false);
+    onion.hide();
     document.body.classList.remove('editing');
     $('speedLabel').textContent = 'Speed';
     app.onExitEdit();
@@ -347,9 +394,18 @@ export function initAnimate(app) {
   $('anCancel').addEventListener('click', () => $('animateDlg').classList.add('hidden'));
   $('edExit').addEventListener('click', exit);
   $('edKey').addEventListener('click', keyPose);
-  $('edDelete').addEventListener('click', deleteKey);
+  $('edDelete').addEventListener('click', (e) => (e.shiftKey ? deleteFrame() : deleteKey()));
+  $('edDeleteFrame').addEventListener('click', deleteFrame);
+  $('edKeyStart').checked = (() => { try { return localStorage.getItem('pzKeyStart') !== '0'; } catch { return true; } })();
+  $('edKeyStart').addEventListener('change', () => { try { localStorage.setItem('pzKeyStart', $('edKeyStart').checked ? '1' : '0'); } catch {} });
   $('edReduce').addEventListener('click', reduce);
   $('edCopy').addEventListener('click', copy);
+  const onionPrefs = (() => { try { return JSON.parse(localStorage.getItem('pzOnion')) || {}; } catch { return {}; } })();
+  $('edOnion').value = onion.mode = onionPrefs.mode || 'off';
+  $('edOnionBone').checked = onion.boneOnly = !!onionPrefs.boneOnly;
+  const saveOnion = () => { try { localStorage.setItem('pzOnion', JSON.stringify({ mode: onion.mode, boneOnly: onion.boneOnly })); } catch {} };
+  $('edOnion').addEventListener('change', () => { onion.mode = $('edOnion').value; saveOnion(); });
+  $('edOnionBone').addEventListener('change', () => { onion.boneOnly = $('edOnionBone').checked; saveOnion(); });
   $('edPaste').addEventListener('click', paste);
   $('edLoop').addEventListener('change', () => change(() => { ed.doc.loop = $('edLoop').checked; }));
   $('edIK').addEventListener('change', () => { poser.ik = $('edIK').checked; try { localStorage.setItem('pzIK', poser.ik ? '1' : '0'); } catch {} });
@@ -381,7 +437,7 @@ export function initAnimate(app) {
     const mod = e.ctrlKey || e.metaKey;
     if (mod && e.key.toLowerCase() === 'z' && !e.shiftKey) { e.preventDefault(); undo(); }
     else if (mod && (e.key.toLowerCase() === 'y' || (e.key.toLowerCase() === 'z' && e.shiftKey))) { e.preventDefault(); redo(); }
-    else if (e.key === 'Delete' || e.key === 'Backspace') { e.preventDefault(); deleteKey(); }
+    else if (e.key === 'Delete' || e.key === 'Backspace') { e.preventDefault(); if (e.shiftKey) deleteFrame(); else deleteKey(); }
     else if (e.key === 'k' || e.key === 'K') keyPose();
     else if (mod && e.key.toLowerCase() === 'c') { e.preventDefault(); copy(); }
     else if (mod && e.key.toLowerCase() === 'v') { e.preventDefault(); paste(); }
@@ -394,13 +450,13 @@ export function initAnimate(app) {
     tick,
     togglePlay() { setPlaying(!ed.playing); },
     setSpeed(v) { if (ed.active) { ed.doc.speed = v > 0 ? v : 1; autosave(); } },
-    onCharacterChanged() { if (ed.active) { poser.rebuild(); fillBoneList(); applyPose(); } },
+    onCharacterChanged() { if (ed.active) { poser.rebuild(); onion.build(); fillBoneList(); applyPose(); } },
     // For the export dialog.
     exportSource() {
       if (!ed.active || !ed.template) return null;
       return { anim: ed.doc.bake(ed.template.parsed, state.character), templateText: ed.template.text, templateRel: ed.template.rel, name: ed.doc.name, label: `Editor: ${ed.doc.name}` };
     },
-    exitQuiet() { if (ed.active) { ed.active = false; ed.playing = false; poser.setEnabled(false); document.body.classList.remove('editing'); $('speedLabel').textContent = 'Speed'; $('speed').value = 1; setStatus('Left Animate mode (your animation is autosaved: Animate… → Resume).'); } },
-    ed, poser, timeline, enter, keyPose, undo, redo, copy, paste,
+    exitQuiet() { if (ed.active) { ed.active = false; ed.playing = false; poser.setEnabled(false); onion.hide(); document.body.classList.remove('editing'); $('speedLabel').textContent = 'Speed'; $('speed').value = 1; setStatus('Left Animate mode (your animation is autosaved: Animate… → Resume).'); } },
+    ed, poser, timeline, onion, enter, keyPose, undo, redo, copy, paste,
   };
 }
